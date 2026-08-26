@@ -1,0 +1,24 @@
+# Production Checklist
+
+- [ ] HTTPS enabled for frontend and API
+- [ ] `ENVIRONMENT=production`
+- [ ] Strong `JWT_SECRET_KEY`
+- [ ] Strong admin password seeded, then stored safely
+- [ ] No real secrets in Git history or deployment logs
+- [ ] `CORS_ORIGINS` contains only production frontend origin
+- [ ] Secure cookies verified over HTTPS
+- [ ] CSRF header verified for admin state-changing requests
+- [ ] Rate limiting active for login and refresh
+- [ ] Alembic migrations run successfully
+- [ ] Railway PostgreSQL private/internal URL used by API where available
+- [ ] PostgreSQL is not publicly exposed unless deliberately required
+- [ ] Database backups enabled with tested restore
+- [ ] Stripe production webhook configured with signature secret
+- [ ] Cloudflare Pages configured for Angular
+- [ ] Cloudflare DNS/proxy configured for `www` and `api`
+- [ ] Security headers verified
+- [ ] `npm audit` reviewed
+- [ ] Python dependency audit reviewed
+- [ ] Production Angular build completed
+- [ ] Backend health check passing
+- [ ] Smoke tests completed
