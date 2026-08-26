@@ -10,3 +10,10 @@ backend/.venv/
 backend/.coverage
 
 postgres-data/
+
+# terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/*.tfvars
+infra/*.pem

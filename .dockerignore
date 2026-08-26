@@ -1,0 +1,11 @@
+.git
+.env
+frontend
+infra
+images
+**/node_modules
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.venv
+*.pem

@@ -1,0 +1,119 @@
+name: CI/CD — Lint, Test, Build & Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: |
+          pip install modules/ds/ds_package modules/mle/mle_package
+          pip install -r modules/deployment/requirements.txt
+
+      - name: Lint with black
+        run: |
+          black --check \
+            modules/de/dags/ \
+            modules/deployment/app/ \
+            modules/ds/ds_package/src/ \
+            modules/mle/mle_package/src/
+
+      - name: Run tests
+        run: |
+          pytest modules/deployment/app/tests/test_api.py -v
+
+  build-and-push:
+    name: Build & Push to Docker Hub
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        run: |
+          docker build \
+            -f modules/deployment/Dockerfile \
+            -t $DH_REGISTRY/$DH_REPO:$IMAGE_TAG \
+            -t $DH_REGISTRY/$DH_REPO:latest \
+            modules/
+          docker push $DH_REGISTRY/$DH_REPO:$IMAGE_TAG
+          docker push $DH_REGISTRY/$DH_REPO:latest
+
+          docker build \
+            -f modules/deployment/Dockerfile \
+            -t ${{ secrets.DOCKER_USERNAME }}/${{ vars.DOCKER_REPOSITORY }}:${{ github.sha }} \
+            -t ${{ secrets.DOCKER_USERNAME }}/${{ vars.DOCKER_REPOSITORY }}:latest \
+            modules/
+          docker push ${{ secrets.DOCKER_USERNAME }}/${{ vars.DOCKER_REPOSITORY }}:${{ github.sha }}
+          docker push ${{ secrets.DOCKER_USERNAME }}/${{ vars.DOCKER_REPOSITORY }}:latest
+
+        env:
+          DH_REGISTRY: ${{ secrets.DOCKER_USERNAME }}
+          DH_REPO: ${{ vars.DOCKER_REPOSITORY }}
+          IMAGE_TAG: ${{ github.sha }}
+
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy docker-compose to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "docker-compose.api.deployment.yaml"
+          target: /app
+
+      - name: Copy nginx config to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "modules/deployment/nginx/api.conf"
+          target: /app
+          strip_components: 3 
+
+      - name: Deploy on EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /app
+
+            export DH_REGISTRY=${{ secrets.DOCKER_USERNAME }}
+            export DH_REPO=${{ vars.DOCKER_REPOSITORY }}
+            export TAG="latest"
+
+            docker compose -f docker-compose.api.deployment.yaml pull api
+            docker compose -f docker-compose.api.deployment.yaml up -d
+            docker image prune -f
